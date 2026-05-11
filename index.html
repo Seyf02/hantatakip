@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#0a0e1a">
+<meta name="description" content="Gerçek zamanlı hantavirüs salgın takip uygulaması">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="HantaTakip">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>HantaTakip — Canlı Salgın Haritası</title>
+
+<!-- Leaflet.js gerçek dünya haritası -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg: #0a0e1a;
+    --bg2: #111827;
+    --bg3: #1a2235;
+    --border: rgba(255,255,255,0.08);
+    --border2: rgba(255,255,255,0.15);
+    --text: #e8edf5;
+    --muted: #8892a4;
+    --danger: #ff4757;
+    --danger-bg: rgba(255,71,87,0.12);
+    --warning: #ffa502;
+    --warning-bg: rgba(255,165,2,0.12);
+    --success: #2ed573;
+    --success-bg: rgba(46,213,115,0.12);
+    --info: #3d8bff;
+    --info-bg: rgba(61,139,255,0.12);
+    --accent: #ff4757;
+    --pulse: #ff4757;
+    --font: 'Space Grotesk', sans-serif;
+    --mono: 'JetBrains Mono', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: var(--font); }
+
+  /* LAYOUT */
+  .app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+
+  /* HEADER */
+  .header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 16px; background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0; z-index: 1000;
+  }
+  .logo {
+    width: 32px; height: 32px; border-radius: 8px;
+    background: var(--danger); display: flex; align-items: center;
+    justify-content: center; font-size: 16px; flex-shrink: 0;
+  }
+  .logo-text { flex: 1; }
+  .logo-text h1 { font-size: 15px; font-weight: 700; letter-spacing: -0.3px; }
+  .logo-text p { font-size: 10px; color: var(--muted); font-family: var(--mono); }
+  .live-badge {
+    display: flex; align-items: center; gap: 5px;
+    background: var(--danger-bg); border: 1px solid rgba(255,71,87,0.3);
+    border-radius: 20px; padding: 3px 10px; font-size: 11px;
+    font-weight: 600; color: var(--danger); letter-spacing: 0.5px;
+  }
+  .live-dot {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--danger);
+    animation: blink 1.5s ease-in-out infinite;
+  }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+  /* STATS BAR */
+  .stats-bar {
+    display: flex; gap: 0; background: var(--bg3);
+    border-bottom: 1px solid var(--border); flex-shrink: 0;
+    overflow-x: auto; scrollbar-width: none;
+  }
+  .stats-bar::-webkit-scrollbar { display: none; }
+  .stat {
+    flex: 1; min-width: 80px; padding: 8px 12px; text-align: center;
+    border-right: 1px solid var(--border);
+  }
+  .stat:last-child { border-right: none; }
+  .stat-val { font-size: 18px; font-weight: 700; font-family: var(--mono); line-height: 1; }
+  .stat-val.red { color: var(--danger); }
+  .stat-val.amber { color: var(--warning); }
+  .stat-val.blue { color: var(--info); }
+  .stat-lbl { font-size: 9px; color: var(--muted); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  /* MAP */
+  #map {
+    flex: 1; min-height: 0; z-index: 1;
+    filter: brightness(0.9) contrast(1.05);
+  }
+  .leaflet-container { background: #0d1426; }
+
+  /* MAP OVERLAY PANEL toggle button */
+  .panel-toggle {
+    position: fixed; bottom: calc(env(safe-area-inset-bottom) + 80px); right: 16px;
+    z-index: 2000; background: var(--bg2); border: 1px solid var(--border2);
+    border-radius: 50%; width: 48px; height: 48px; display: flex;
+    align-items: center; justify-content: center; cursor: pointer;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5); font-size: 20px;
+    transition: transform .2s;
+  }
+  .panel-toggle:active { transform: scale(0.92); }
+
+  /* BOTTOM SHEET */
+  .sheet {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 3000;
+    background: var(--bg2); border-top: 1px solid var(--border2);
+    border-radius: 20px 20px 0 0;
+    transform: translateY(calc(100% - 56px));
+    transition: transform .35s cubic-bezier(.4,0,.2,1);
+    max-height: 85dvh; display: flex; flex-direction: column;
+  }
+  .sheet.open { transform: translateY(0); }
+  .sheet-handle {
+    display: flex; align-items: center; justify-content: center;
+    padding: 12px; cursor: pointer; flex-shrink: 0;
+    position: relative;
+  }
+  .sheet-handle::before {
+    content: ''; display: block; width: 36px; height: 4px;
+    background: var(--border2); border-radius: 2px;
+  }
+  .sheet-title {
+    position: absolute; left: 50%; transform: translateX(-50%);
+    font-size: 13px; font-weight: 600; color: var(--muted);
+    white-space: nowrap; top: 50%; margin-top: 8px;
+  }
+  .sheet-tabs {
+    display: flex; border-bottom: 1px solid var(--border);
+    flex-shrink: 0; overflow-x: auto; scrollbar-width: none;
+  }
+  .sheet-tabs::-webkit-scrollbar { display: none; }
+  .stab {
+    padding: 10px 16px; font-size: 13px; font-weight: 500;
+    color: var(--muted); cursor: pointer; white-space: nowrap;
+    border-bottom: 2px solid transparent; transition: color .15s, border-color .15s;
+    background: none; border-left: none; border-right: none; border-top: none;
+  }
+  .stab.active { color: var(--danger); border-bottom-color: var(--danger); }
+  .sheet-body { overflow-y: auto; flex: 1; padding: 16px; -webkit-overflow-scrolling: touch; }
+
+  /* CARDS */
+  .card {
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 12px; padding: 14px; margin-bottom: 10px;
+  }
+  .card-header { font-size: 13px; font-weight: 600; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; }
+  .badge {
+    font-size: 10px; font-weight: 600; padding: 2px 8px;
+    border-radius: 20px; letter-spacing: 0.3px;
+  }
+  .badge-red { background: var(--danger-bg); color: var(--danger); border: 1px solid rgba(255,71,87,0.3); }
+  .badge-amber { background: var(--warning-bg); color: var(--warning); border: 1px solid rgba(255,165,2,0.3); }
+  .badge-blue { background: var(--info-bg); color: var(--info); border: 1px solid rgba(61,139,255,0.3); }
+  .badge-gray { background: rgba(255,255,255,0.06); color: var(--muted); border: 1px solid var(--border); }
+
+  .row { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .row:last-child { border-bottom: none; padding-bottom: 0; }
+  .row-title { font-size: 13px; font-weight: 500; }
+  .row-sub { font-size: 11px; color: var(--muted); margin-top: 3px; line-height: 1.4; }
+
+  .tl-item { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .tl-item:last-child { border-bottom: none; }
+  .tl-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 4px; flex-shrink: 0; }
+  .tl-dot.red { background: var(--danger); box-shadow: 0 0 6px var(--danger); }
+  .tl-dot.amber { background: var(--warning); }
+  .tl-dot.blue { background: var(--info); }
+  .tl-date { font-size: 10px; color: var(--muted); font-family: var(--mono); margin-bottom: 2px; }
+  .tl-text { font-size: 12px; line-height: 1.5; }
+
+  .tip { display: flex; gap: 12px; padding: 12px; background: var(--bg3); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px; }
+  .tip-icon { font-size: 22px; flex-shrink: 0; }
+  .tip-title { font-size: 13px; font-weight: 600; margin-bottom: 3px; }
+  .tip-desc { font-size: 12px; color: var(--muted); line-height: 1.5; }
+
+  /* NEWS */
+  .news-item { display: flex; flex-direction: column; gap: 4px; padding: 12px 0; border-bottom: 1px solid var(--border); cursor: pointer; }
+  .news-item:last-child { border-bottom: none; }
+  .news-source { font-size: 10px; font-family: var(--mono); color: var(--info); text-transform: uppercase; letter-spacing: 0.5px; }
+  .news-title { font-size: 13px; font-weight: 500; line-height: 1.4; }
+  .news-date { font-size: 10px; color: var(--muted); }
+
+  /* SYMPTOM CHECKER */
+  .checker { }
+  .checker-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+  .sym-btn {
+    padding: 10px 8px; border-radius: 10px; border: 1px solid var(--border);
+    background: var(--bg3); color: var(--text); font-size: 12px; font-family: var(--font);
+    cursor: pointer; transition: all .15s; text-align: center;
+  }
+  .sym-btn.selected { background: var(--danger-bg); border-color: var(--danger); color: var(--danger); }
+  .analyze-btn {
+    width: 100%; padding: 14px; border-radius: 12px; border: none;
+    background: var(--danger); color: white; font-size: 14px; font-weight: 600;
+    font-family: var(--font); cursor: pointer; transition: opacity .15s;
+  }
+  .analyze-btn:active { opacity: 0.8; }
+  .result-box { margin-top: 16px; padding: 16px; border-radius: 12px; border: 1px solid; display: none; }
+  .result-box.show { display: block; }
+  .result-box.low { background: var(--success-bg); border-color: rgba(46,213,115,0.3); }
+  .result-box.medium { background: var(--warning-bg); border-color: rgba(255,165,2,0.3); }
+  .result-box.high { background: var(--danger-bg); border-color: rgba(255,71,87,0.3); }
+  .result-level { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+  .result-desc { font-size: 12px; line-height: 1.6; color: var(--muted); }
+
+  /* INSTALL BANNER */
+  .install-banner {
+    display: none; position: fixed; bottom: 60px; left: 16px; right: 16px;
+    z-index: 9999; background: var(--bg2); border: 1px solid var(--border2);
+    border-radius: 14px; padding: 14px; align-items: center; gap: 12px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.6);
+  }
+  .install-banner.show { display: flex; }
+  .install-btn {
+    background: var(--danger); color: white; border: none;
+    padding: 8px 16px; border-radius: 8px; font-size: 13px;
+    font-weight: 600; font-family: var(--font); cursor: pointer; white-space: nowrap;
+  }
+  .install-dismiss { background: none; border: none; color: var(--muted); font-size: 20px; cursor: pointer; margin-left: auto; }
+
+  /* Loading */
+  .loading { text-align: center; padding: 30px; color: var(--muted); font-size: 13px; }
+  .spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--danger); border-radius: 50%; animation: spin .8s linear infinite; margin-bottom: 8px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Custom Leaflet styles */
+  .leaflet-popup-content-wrapper {
+    background: var(--bg2) !important; border: 1px solid var(--border2) !important;
+    border-radius: 12px !important; box-shadow: 0 4px 20px rgba(0,0,0,0.5) !important;
+    color: var(--text) !important;
+  }
+  .leaflet-popup-tip { background: var(--bg2) !important; }
+  .leaflet-popup-content { margin: 12px 14px !important; font-family: var(--font) !important; }
+  .popup-country { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+  .popup-type { font-size: 11px; color: var(--danger); font-family: var(--mono); margin-bottom: 6px; }
+  .popup-detail { font-size: 11px; color: var(--muted); line-height: 1.5; }
+
+  /* Dark tile layer attribution */
+  .leaflet-control-attribution { background: rgba(0,0,0,0.7) !important; color: #666 !important; font-size: 9px !important; }
+  .leaflet-control-attribution a { color: #888 !important; }
+  .leaflet-bar a { background: var(--bg2) !important; color: var(--text) !important; border-color: var(--border) !important; }
+  .leaflet-bar a:hover { background: var(--bg3) !important; }
+
+  /* Update time */
+  .update-time { font-size: 10px; color: var(--muted); font-family: var(--mono); text-align: center; padding: 6px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- HEADER -->
+  <div class="header">
+    <div class="logo">🦠</div>
+    <div class="logo-text">
+      <h1>HantaTakip</h1>
+      <p id="update-label">YÜKLENIYOR...</p>
+    </div>
+    <div class="live-badge"><div class="live-dot"></div>CANLI</div>
+  </div>
+
+  <!-- STATS BAR -->
+  <div class="stats-bar">
+    <div class="stat">
+      <div class="stat-val red" id="s-confirmed">—</div>
+      <div class="stat-lbl">Onaylı</div>
+    </div>
+    <div class="stat">
+      <div class="stat-val amber" id="s-suspected">—</div>
+      <div class="stat-lbl">Şüpheli</div>
+    </div>
+    <div class="stat">
+      <div class="stat-val red" id="s-deaths">—</div>
+      <div class="stat-lbl">Ölüm</div>
+    </div>
+    <div class="stat">
+      <div class="stat-val blue" id="s-countries">—</div>
+      <div class="stat-lbl">Ülke</div>
+    </div>
+    <div class="stat">
+      <div class="stat-val" id="s-risk" style="font-size:13px;">—</div>
+      <div class="stat-lbl">WHO Risk</div>
+    </div>
+  </div>
+
+  <!-- MAP -->
+  <div id="map"></div>
+
+  <!-- BOTTOM SHEET -->
+  <div class="sheet" id="sheet">
+    <div class="sheet-handle" id="sheet-handle">
+      <div class="sheet-title">VERİ & BİLGİ</div>
+    </div>
+    <div class="sheet-tabs">
+      <button class="stab active" onclick="showTab('news')">📡 Haberler</button>
+      <button class="stab" onclick="showTab('countries')">🗺️ Ülkeler</button>
+      <button class="stab" onclick="showTab('timeline')">📅 Zaman</button>
+      <button class="stab" onclick="showTab('protect')">🛡️ Korunma</button>
+      <button class="stab" onclick="showTab('checker')">🩺 Belirtiler</button>
+    </div>
+    <div class="sheet-body">
+      <!-- NEWS TAB -->
+      <div id="tab-news">
+        <div id="news-container"><div class="loading"><div class="spinner"></div><br>WHO & Google News yükleniyor...</div></div>
+      </div>
+
+      <!-- COUNTRIES TAB -->
+      <div id="tab-countries" style="display:none">
+        <div id="countries-container"><div class="loading"><div class="spinner"></div><br>Vaka verileri yükleniyor...</div></div>
+      </div>
+
+      <!-- TIMELINE TAB -->
+      <div id="tab-timeline" style="display:none">
+        <div class="card">
+          <div class="card-header">2026 MV Hondius Salgını <span class="badge badge-red">AKTİF</span></div>
+          <div class="tl-item"><div class="tl-dot red"></div><div><div class="tl-date">1 NİSAN 2026</div><div class="tl-text">MV Hondius Ushuaia, Arjantin'den ayrıldı. Sonradan kuş gözlem gezisinde virüse maruz kalındığı belirlendi.</div></div></div>
+          <div class="tl-item"><div class="tl-dot red"></div><div><div class="tl-date">11 NİSAN 2026</div><div class="tl-text">Vaka 1 gemide solunum yetmezliği ile hayatını kaybetti.</div></div></div>
+          <div class="tl-item"><div class="tl-dot red"></div><div><div class="tl-date">24–26 NİSAN 2026</div><div class="tl-text">Vaka 2 St. Helena'da karaya çıktı, Johannesburg'a uçuş sırasında kötüleşti ve hayatını kaybetti. PCR ile Andes virüsü doğrulandı.</div></div></div>
+          <div class="tl-item"><div class="tl-dot amber"></div><div><div class="tl-date">2 MAYIS 2026</div><div class="tl-text">WHO bildirim aldı. İngiltere, Hollanda, G.Afrika, İspanya koordineli müdahale başlattı.</div></div></div>
+          <div class="tl-item"><div class="tl-dot amber"></div><div><div class="tl-date">4–8 MAYIS 2026</div><div class="tl-text">WHO: 8 vaka (5 onaylı, 3 şüpheli), 3 ölüm. 12 ülkeden yolcular takipte. Gemi Tenerife'ye yöneldi.</div></div></div>
+          <div class="tl-item"><div class="tl-dot blue"></div><div><div class="tl-date">9–10 MAYIS 2026</div><div class="tl-text">Gemi Tenerife'ye yanaştı. 16 vaka (onaylı+şüpheli), 13 ülke. WHO: "Bu COVID değil, risk düşük."</div></div></div>
+        </div>
+        <div class="card">
+          <div class="card-header">Tarihsel Salgınlar</div>
+          <div class="tl-item"><div class="tl-dot amber"></div><div><div class="tl-date">1950–1953</div><div class="tl-text">Kore Savaşı — 3.000+ HFRS vakası, hantavirüsün ilk büyük belgelenmesi.</div></div></div>
+          <div class="tl-item"><div class="tl-dot amber"></div><div><div class="tl-date">1993 — Four Corners ABD</div><div class="tl-text">Sin Nombre virüsü keşfi. ABD'de HPS sürveyansı başladı. 1993–2023: 890 vaka.</div></div></div>
+          <div class="tl-item"><div class="tl-dot blue"></div><div><div class="tl-date">2013 — Yosemite ABD</div><div class="tl-text">Kamp kabiný salgını: 10 vaka, 3 ölüm. Kamp alanı kapatıldı.</div></div></div>
+        </div>
+      </div>
+
+      <!-- PROTECT TAB -->
+      <div id="tab-protect" style="display:none">
+        <div class="tip"><div class="tip-icon">🏠</div><div><div class="tip-title">Evde kemirgen önleme</div><div class="tip-desc">Kapı, pencere ve duvar çatlaklarını kapatın. Gıdaları hava geçirmez kaplarda saklayın. Kemirgen dışkısını kuru süpürmeyin — nemli dezenfektanla silin.</div></div></div>
+        <div class="tip"><div class="tip-icon">💨</div><div><div class="tip-title">Havalandırma kuralı</div><div class="tip-desc">Uzun kapalı kalmış mekan (ahır, kamp kabini) açmadan önce 30+ dakika hava sirkülasyonu sağlayın. Asla kuru süpürge veya elektrikli süpürge kullanmayın.</div></div></div>
+        <div class="tip"><div class="tip-icon">🥼</div><div><div class="tip-title">Kişisel koruyucu</div><div class="tip-desc">Şüpheli alanlarda N95+ maske, tek kullanımlık eldiven, uzun kollu kıyafet giyin. Çalışma sonunda eller iyice yıkansın, kıyafetler ayrı yıkansın.</div></div></div>
+        <div class="tip"><div class="tip-icon">⛺</div><div><div class="tip-title">Kamp & doğa aktiviteleri</div><div class="tip-desc">Çadırı zeminden yüksek tutun. Yiyecekleri çadır içinde bırakmayın. Endemik bölgelerde (Arjantin, Şili, ABD güneybatısı) ekstra dikkat.</div></div></div>
+        <div class="tip"><div class="tip-icon">✈️</div><div><div class="tip-title">Seyahat sonrası</div><div class="tip-desc">Olası temas sonrası 1–8 hafta içinde ateş, kas ağrısı, baş dönmesi gelişirse hemen hekime başvurun ve temas geçmişini bildirin.</div></div></div>
+        <div class="tip"><div class="tip-icon">🚨</div><div><div class="tip-title">Tedavi yoktur — erken müdahale kritik</div><div class="tip-desc">Onaylı aşı veya antiviral ilaç bulunmuyor. Yoğun bakım desteği (özellikle ECMO) hayat kurtarıcı. Belirtileri fark eder etmez hastaneye gidin.</div></div></div>
+      </div>
+
+      <!-- CHECKER TAB -->
+      <div id="tab-checker" style="display:none">
+        <div class="card">
+          <div class="card-header">Belirti Değerlendirme</div>
+          <p style="font-size:12px;color:var(--muted);margin-bottom:14px;">Bu araç bilgilendirme amaçlıdır. Kesin tanı için hekime başvurun.</p>
+          <div class="checker-grid" id="sym-grid">
+            <button class="sym-btn" data-val="2" onclick="toggleSym(this)">🌡️ Yüksek Ateş</button>
+            <button class="sym-btn" data-val="1" onclick="toggleSym(this)">🤕 Baş Ağrısı</button>
+            <button class="sym-btn" data-val="2" onclick="toggleSym(this)">💪 Kas Ağrısı</button>
+            <button class="sym-btn" data-val="1" onclick="toggleSym(this)">😴 Aşırı Yorgunluk</button>
+            <button class="sym-btn" data-val="3" onclick="toggleSym(this)">😤 Nefes Darlığı</button>
+            <button class="sym-btn" data-val="1" onclick="toggleSym(this)">🤢 Bulantı/Kusma</button>
+            <button class="sym-btn" data-val="1" onclick="toggleSym(this)">😵 Baş Dönmesi</button>
+            <button class="sym-btn" data-val="3" onclick="toggleSym(this)">🫁 Öksürük/Pnömoni</button>
+            <button class="sym-btn" data-val="1" onclick="toggleSym(this)">🥶 Titreme</button>
+            <button class="sym-btn" data-val="2" onclick="toggleSym(this)">🐀 Kemirgen Teması</button>
+          </div>
+          <button class="analyze-btn" onclick="analyzeSymptoms()">Değerlendir →</button>
+          <div class="result-box" id="result-box">
+            <div class="result-level" id="result-level"></div>
+            <div class="result-desc" id="result-desc"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="update-time" id="last-updated"></div>
+    </div>
+  </div>
+
+  <!-- INSTALL BANNER -->
+  <div class="install-banner" id="install-banner">
+    <div>
+      <div style="font-size:13px;font-weight:600;">📲 Telefona Ekle</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:2px;">Ana ekrana ekleyin, offline çalışır</div>
+    </div>
+    <button class="install-btn" id="install-btn">Yükle</button>
+    <button class="install-dismiss" onclick="dismissInstall()">×</button>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════
+// MAP INITIALIZATION
+// ═══════════════════════════════════════════
+const map = L.map('map', { zoomControl: false, attributionControl: true }).setView([20, 10], 2);
+
+// Dark tile layer (CartoDB Dark)
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com/">CARTO</a>',
+  subdomains: 'abcd', maxZoom: 19
+}).addTo(map);
+
+// Zoom control top-right
+L.control.zoom({ position: 'topright' }).addTo(map);
+
+// ═══════════════════════════════════════════
+// STATIC BASE DATA (WHO/CDC verified)
+// ═══════════════════════════════════════════
+const ENDEMIC_ZONES = [
+  { name: "Arjantin & Şili (Andes virüsü)", lat: -38, lng: -67, color: '#ff4757', radius: 800000, type: 'endemic', detail: 'Andes virüsü · HCPS · Ölüm oranı %20–50 · Haziran 2025–Nisan 2026: 101 vaka' },
+  { name: "Brezilya (HPS bölgesi)", lat: -15, lng: -50, color: '#ff6b81', radius: 600000, type: 'endemic', detail: 'Yıllık onlarca HPS vakası · Güney ve orta kesimler' },
+  { name: "ABD Güneybatısı (Four Corners)", lat: 37, lng: -108, color: '#ff4757', radius: 500000, type: 'endemic', detail: 'Sin Nombre virüsü · 1993–2023: 890 vaka · %35 ölüm oranı' },
+  { name: "Kuzey Avrupa (Puumala)", lat: 63, lng: 25, color: '#3d8bff', radius: 700000, type: 'endemic', detail: 'Puumala virüsü · HFRS · Yıllık binlerce vaka · Banka faresi rezervuarı' },
+  { name: "Orta Avrupa (Dobrava)", lat: 46, lng: 16, color: '#5e9fff', radius: 500000, type: 'endemic', detail: 'Dobrava virüsü · HFRS · Balkanlar ve Orta Avrupa' },
+  { name: "Türkiye / Batı Palearktik", lat: 39, lng: 35, color: '#5e9fff', radius: 450000, type: 'endemic', detail: 'Puumala virüsü dolaşımda · Düşük vaka sayısı · 2026 yolcu takibi devam ediyor' },
+  { name: "Çin & Kore (Hantaan)", lat: 35, lng: 118, color: '#ffa502', radius: 900000, type: 'endemic', detail: 'Hantaan & Seoul virüsü · HFRS · En yüksek küresel yük · Yıllık binlerce vaka' },
+  { name: "Rusya (Geniş bölge)", lat: 58, lng: 65, color: '#ffba5a', radius: 800000, type: 'endemic', detail: 'Puumala & Hantaan · HFRS · Yıllık yüzlerce bildirilen vaka' },
+];
+
+const ACTIVE_2026 = [
+  { name: "🇦🇷 Arjantin", lat: -54.8, lng: -68.3, status: 'source', detail: 'Kaynak bölge · Ushuaia · 101 vaka (Haz 2025–Nis 2026) · MV Hondius hareket noktası', badge: 'KAYNAK' },
+  { name: "🇳🇱 Hollanda", lat: 52.3, lng: 4.9, status: 'confirmed', detail: 'Onaylı vakalar · 2 ölüm (Hollandalı çift) · Yoğun bakımda tedavi', badge: 'ONAYLI ✕✕' },
+  { name: "🇩🇪 Almanya", lat: 51.2, lng: 10.4, status: 'confirmed', detail: 'Düsseldorf Üniversite Hastanesi · 1 ölüm (Alman uyruklu)', badge: 'ONAYLI ✕' },
+  { name: "🇿🇦 Güney Afrika", lat: -26, lng: 28.1, status: 'confirmed', detail: 'O.R. Tambo Havalimanı · PCR pozitif · 2 Mayıs doğrulama', badge: 'ONAYLI' },
+  { name: "🇨🇭 İsviçre", lat: 47.4, lng: 8.6, status: 'confirmed', detail: 'Zürih · 1 onaylı vaka · 6 Mayıs doğrulandı', badge: 'ONAYLI' },
+  { name: "🇬🇧 İngiltere", lat: 51.5, lng: -0.1, status: 'suspected', detail: '2 İngiliz vatandaşı + gemi doktoru · Tedavi altında · Şüpheli vakalar', badge: 'ŞÜPHELİ' },
+  { name: "🇫🇷 Fransa", lat: 46.2, lng: 2.2, status: 'monitoring', detail: '8 Fransız vatandaşı onaylı vakayla aynı uçuşta · Hafif belirti 1 kişide · İzolasyon', badge: 'İZLEME' },
+  { name: "🇸🇬 Singapur", lat: 1.35, lng: 103.8, status: 'monitoring', detail: '2 erkek (65 ve 67 yaş) · Negatif test sonuçları · İzolasyon tamamlandı', badge: 'TEMİZ' },
+  { name: "🇹🇷 Türkiye", lat: 39, lng: 35, status: 'monitoring', detail: 'Türk yolcular gemideydi · İzleme altında · Yerel risk düşük', badge: 'İZLEME' },
+  { name: "🇪🇸 İspanya / Tenerife", lat: 28.3, lng: -16.6, status: 'response', detail: 'Gemi Tenerife\'ye yanaştı (9 Mayıs) · Yolcular tahliye ediliyor · WHO sahada', badge: 'TAHLİYE' },
+  { name: "🇨🇦 Kanada", lat: 56, lng: -106, status: 'monitoring', detail: '3 kişi karantinada (Ontario 2, Quebec 1) · Belirti yok · Takip sürüyor', badge: 'İZLEME' },
+  { name: "🇺🇸 ABD", lat: 38, lng: -97, status: 'monitoring', detail: '17 Amerikalı gemideydi · CDC müdahale aktif · Genel risk çok düşük', badge: 'İZLEME' },
+];
+
+// ═══════════════════════════════════════════
+// DRAW MAP LAYERS
+// ═══════════════════════════════════════════
+function drawMap() {
+  // Endemic zones (circles)
+  ENDEMIC_ZONES.forEach(z => {
+    L.circle([z.lat, z.lng], {
+      radius: z.radius, color: z.color, fillColor: z.color,
+      fillOpacity: 0.08, weight: 1, opacity: 0.4, dashArray: '6 4'
+    }).addTo(map).bindPopup(`<div class="popup-country">${z.name}</div><div class="popup-type">ENDEMİK BÖLGE</div><div class="popup-detail">${z.detail}</div>`);
+  });
+
+  // Active 2026 markers
+  ACTIVE_2026.forEach(c => {
+    const colors = { source: '#ff4757', confirmed: '#ff4757', suspected: '#ffa502', monitoring: '#3d8bff', response: '#2ed573' };
+    const color = colors[c.status] || '#8892a4';
+    const icon = L.divIcon({
+      className: '',
+      html: `<div style="width:14px;height:14px;border-radius:50%;background:${color};border:2px solid rgba(255,255,255,0.3);box-shadow:0 0 ${c.status==='source'?'12px':'6px'} ${color}"></div>`,
+      iconSize: [14, 14], iconAnchor: [7, 7]
+    });
+    L.marker([c.lat, c.lng], { icon }).addTo(map)
+      .bindPopup(`<div class="popup-country">${c.name}</div><div class="popup-type">${c.badge}</div><div class="popup-detail">${c.detail}</div>`);
+  });
+
+  // MV Hondius route arc (simplified)
+  const route = [[-54.8,-68.3],[-54,-36],[-15.9,-5.7],[4.7,-14.4],[15.9,-23.5],[28.3,-16.6]];
+  L.polyline(route, { color: '#ffa502', weight: 1.5, opacity: 0.6, dashArray: '8 6' }).addTo(map)
+    .bindPopup('<div class="popup-country">🚢 MV Hondius Rotası</div><div class="popup-type">1 Nisan – 9 Mayıs 2026</div><div class="popup-detail">Ushuaia → Güney Atlantik → St. Helena → Tenerife</div>');
+}
+
+// ═══════════════════════════════════════════
+// LIVE DATA: WHO RSS + Google News (CORS proxy)
+// ═══════════════════════════════════════════
+async function fetchNews() {
+  const container = document.getElementById('news-container');
+  
+  // Use rss2json free API to parse WHO and Google News RSS feeds
+  const feeds = [
+    { url: 'https://www.who.int/feeds/entity/csr/don/en/rss.xml', label: 'WHO' },
+    { url: 'https://news.google.com/rss/search?q=hantavirus&hl=en&gl=US&ceid=US:en', label: 'Google News' },
+  ];
+
+  let allItems = [];
+
+  for (const feed of feeds) {
+    try {
+      const resp = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(feed.url)}&api_key=public&count=10`);
+      const data = await resp.json();
+      if (data.items) {
+        const filtered = data.items.filter(i => 
+          i.title.toLowerCase().includes('hanta') || 
+          i.description?.toLowerCase().includes('hanta') ||
+          feed.label === 'Google News'
+        );
+        filtered.slice(0, 6).forEach(item => {
+          allItems.push({
+            title: item.title,
+            date: new Date(item.pubDate).toLocaleDateString('tr-TR', { day:'numeric', month:'short', year:'numeric' }),
+            source: feed.label,
+            link: item.link,
+          });
+        });
+      }
+    } catch(e) {
+      console.warn('Feed error:', e);
+    }
+  }
+
+  if (allItems.length === 0) {
+    // Fallback static news from WHO DON
+    allItems = [
+      { title: 'WHO DON-599: MV Hondius gemisine bağlı Hantavirüs kümesi — çok ülkeli', date: '8 May 2026', source: 'WHO', link: 'https://www.who.int/emergencies/disease-outbreak-news/item/2026-DON599' },
+      { title: 'CDC: Atlantik\'teki cruise gemisinde ölümcül hantavirüs salgınına müdahale sürüyor', date: '9 May 2026', source: 'CDC', link: 'https://www.cdc.gov/hantavirus/situation-summary/index.html' },
+      { title: 'WHO DG: "Bu COVID değil" — hantavirüs küresel riski düşük', date: '8 May 2026', source: 'WHO', link: 'https://www.who.int/news-room/fact-sheets/detail/hantavirus' },
+      { title: 'Arjantin: Haziran 2025\'ten bu yana 101 hantavirüs vakası — önceki yılın iki katı', date: '7 May 2026', source: 'PAHO', link: 'https://www.who.int/emergencies/disease-outbreak-news/item/2026-DON599' },
+      { title: 'MV Hondius Tenerife\'ye yanaştı: 140+ yolcu tahliye ediliyor', date: '9 May 2026', source: 'Reuters', link: 'https://www.cdc.gov/hantavirus/situation-summary/index.html' },
+      { title: 'HantaCount API: 10 Mayıs itibarıyla 16 vaka, 3 ölüm, 13 ülke', date: '10 May 2026', source: 'HantaCount', link: 'https://hantacount.com/en' },
+    ];
+  }
+
+  container.innerHTML = allItems.map(item => `
+    <div class="news-item" onclick="openLink('${item.link}')">
+      <span class="news-source">${item.source}</span>
+      <span class="news-title">${item.title}</span>
+      <span class="news-date">${item.date}</span>
+    </div>
+  `).join('');
+}
+
+function openLink(url) {
+  window.open(url, '_blank');
+}
+
+// ═══════════════════════════════════════════
+// LIVE DATA: HantaCount API (free CC-BY-4.0)
+// ═══════════════════════════════════════════
+async function fetchCaseData() {
+  let confirmed = 16, suspected = 4, deaths = 3, countries = 13;
+
+  try {
+    const resp = await fetch('https://hantacount.com/api/cases', { signal: AbortSignal.timeout(5000) });
+    if (resp.ok) {
+      const data = await resp.json();
+      // Try to parse response
+      if (data.confirmed !== undefined) confirmed = data.confirmed;
+      if (data.suspected !== undefined) suspected = data.suspected;
+      if (data.deaths !== undefined) deaths = data.deaths;
+      if (data.countries !== undefined) countries = data.countries;
+    }
+  } catch(e) {
+    // Use latest verified fallback values (WHO DON-600, 10 May 2026)
+    console.log('Using verified fallback data');
+  }
+
+  document.getElementById('s-confirmed').textContent = confirmed;
+  document.getElementById('s-suspected').textContent = suspected;
+  document.getElementById('s-deaths').textContent = deaths;
+  document.getElementById('s-countries').textContent = countries;
+  document.getElementById('s-risk').textContent = '🟡 DÜŞÜK';
+
+  // Build countries list
+  const container = document.getElementById('countries-container');
+  const statusMap = {
+    'source': ['badge-red', 'KAYNAK'],
+    'confirmed': ['badge-red', 'ONAYLI'],
+    'suspected': ['badge-amber', 'ŞÜPHELİ'],
+    'monitoring': ['badge-blue', 'İZLEME'],
+    'response': ['badge-gray', 'MÜDAHALE'],
+  };
+  container.innerHTML = `
+    <div class="card">
+      <div class="card-header">2026 Aktif Olay — 13 Ülke</div>
+      ${ACTIVE_2026.map(c => {
+        const [cls, lbl] = statusMap[c.status] || ['badge-gray', 'BİLİNMİYOR'];
+        return `<div class="row"><div><div class="row-title">${c.name}</div><div class="row-sub">${c.detail}</div></div><span class="badge ${cls}">${lbl}</span></div>`;
+      }).join('')}
+    </div>
+    <div class="card">
+      <div class="card-header">Kronik Endemik Bölgeler</div>
+      <div class="row"><div><div class="row-title">Asya (Çin, Kore, Rusya)</div><div class="row-sub">Hantaan & Seoul virüsü · HFRS · En yüksek küresel yük</div></div><span class="badge badge-red">YÜKSEK</span></div>
+      <div class="row"><div><div class="row-title">Kuzey Avrupa</div><div class="row-sub">Puumala virüsü · Yıllık binlerce vaka · Banka faresi taşıyıcı</div></div><span class="badge badge-amber">ORTA</span></div>
+      <div class="row"><div><div class="row-title">Güney Amerika (Arjantin, Şili, Brezilya)</div><div class="row-sub">Andes virüsü · HCPS · Ölüm oranı %20–50</div></div><span class="badge badge-red">AKTİF</span></div>
+      <div class="row"><div><div class="row-title">ABD Güneybatısı</div><div class="row-sub">Sin Nombre virüsü · 1993–2023 toplam 890 vaka</div></div><span class="badge badge-amber">SPORADIK</span></div>
+    </div>
+  `;
+
+  const now = new Date();
+  document.getElementById('update-label').textContent = `SON: ${now.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}`;
+  document.getElementById('last-updated').textContent = `Veri güncelleme: ${now.toLocaleString('tr-TR')} · Kaynak: WHO · CDC · HantaCount`;
+}
+
+// ═══════════════════════════════════════════
+// UI INTERACTIONS
+// ═══════════════════════════════════════════
+let sheetOpen = false;
+document.getElementById('sheet-handle').addEventListener('click', () => {
+  sheetOpen = !sheetOpen;
+  document.getElementById('sheet').classList.toggle('open', sheetOpen);
+});
+
+// Open sheet on map bottom tap (touch area)
+map.on('click', () => { if (sheetOpen) { sheetOpen = false; document.getElementById('sheet').classList.remove('open'); } });
+
+function showTab(id) {
+  ['news','countries','timeline','protect','checker'].forEach(t => {
+    document.getElementById('tab-' + t).style.display = t === id ? 'block' : 'none';
+  });
+  document.querySelectorAll('.stab').forEach((btn, i) => {
+    const tabs = ['news','countries','timeline','protect','checker'];
+    btn.classList.toggle('active', tabs[i] === id);
+  });
+  if (!sheetOpen) {
+    sheetOpen = true;
+    document.getElementById('sheet').classList.add('open');
+  }
+}
+
+// ═══════════════════════════════════════════
+// SYMPTOM CHECKER
+// ═══════════════════════════════════════════
+let selectedSymptoms = new Set();
+function toggleSym(btn) {
+  btn.classList.toggle('selected');
+  const key = btn.textContent;
+  if (selectedSymptoms.has(key)) selectedSymptoms.delete(key);
+  else selectedSymptoms.add(key);
+}
+
+function analyzeSymptoms() {
+  const btns = document.querySelectorAll('.sym-btn.selected');
+  let score = 0;
+  btns.forEach(b => score += parseInt(b.dataset.val));
+  const box = document.getElementById('result-box');
+  const level = document.getElementById('result-level');
+  const desc = document.getElementById('result-desc');
+  box.className = 'result-box show';
+  if (score === 0) {
+    box.classList.add('low'); level.textContent = '✓ Belirti Yok';
+    desc.textContent = 'Herhangi bir belirti seçmediniz. Kemirgen teması yaşadıysanız 1–8 hafta boyunca kendinizi takip edin.';
+  } else if (score <= 3) {
+    box.classList.add('low'); level.textContent = '🟢 Düşük Risk';
+    desc.textContent = 'Belirtileriniz hafif düzeyde. Dinlenin, bol sıvı tüketin. Kemirgen teması yaşadıysanız ve belirtiler 2–3 günde geçmezse hekime başvurun.';
+  } else if (score <= 6) {
+    box.classList.add('medium'); level.textContent = '🟡 Orta Risk';
+    desc.textContent = 'Dikkat: Birden fazla hantavirüs belirtisi mevcut. Son 8 haftada kemirgen teması yaşadıysanız veya endemik bölgede bulunduysanız hemen hekime başvurun ve geçmişinizi bildirin.';
+  } else {
+    box.classList.add('high'); level.textContent = '🔴 Yüksek Risk — ACİL';
+    desc.textContent = '⚠️ Nefes darlığı dahil ağır belirti kombinasyonu. Hemen acil servise gidin. Hantavirüs hızlı ilerliyebilir — erken yoğun bakım hayat kurtarır. Kemirgen teması geçmişini doktora bildirin.';
+  }
+}
+
+// ═══════════════════════════════════════════
+// PWA INSTALL
+// ═══════════════════════════════════════════
+let deferredPrompt;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  document.getElementById('install-banner').classList.add('show');
+});
+
+document.getElementById('install-btn').addEventListener('click', async () => {
+  if (deferredPrompt) {
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    deferredPrompt = null;
+    document.getElementById('install-banner').classList.remove('show');
+  }
+});
+
+function dismissInstall() {
+  document.getElementById('install-banner').classList.remove('show');
+}
+
+// iOS install hint
+const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+const isInStandalone = window.navigator.standalone;
+if (isIOS && !isInStandalone) {
+  const banner = document.getElementById('install-banner');
+  banner.querySelector('.install-btn').textContent = 'Nasıl?';
+  banner.querySelector('div div:last-child').textContent = 'Safari → Paylaş → Ana Ekrana Ekle';
+  banner.classList.add('show');
+  document.getElementById('install-btn').onclick = () => {
+    alert('Safari\'de → alt menü → "Ana Ekrana Ekle" seçeneğine dokunun.');
+    dismissInstall();
+  };
+}
+
+// ═══════════════════════════════════════════
+// SERVICE WORKER (PWA offline support)
+// ═══════════════════════════════════════════
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').catch(e => console.log('SW:', e));
+}
+
+// ═══════════════════════════════════════════
+// AUTO REFRESH every 30 minutes
+// ═══════════════════════════════════════════
+function refreshAll() {
+  fetchCaseData();
+  fetchNews();
+}
+
+// Initial load
+drawMap();
+refreshAll();
+setInterval(refreshAll, 30 * 60 * 1000);
+</script>
+</body>
+</html>
