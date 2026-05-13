@@ -1,33 +1,23 @@
 {
   "name": "HantaTakip — Canlı Salgın Haritası",
   "short_name": "HantaTakip",
-  "description": "Gerçek zamanlı hantavirüs salgın takip uygulaması — WHO, CDC, HantaCount verileri",
-  "start_url": "/",
+  "description": "Gerçek zamanlı hantavirüs salgın takip uygulaması — KeyBrothers Tech ürünüdür",
+  "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#0a0e1a",
-  "theme_color": "#0a0e1a",
+  "background_color": "#060810",
+  "theme_color": "#060810",
   "orientation": "portrait-primary",
   "lang": "tr",
-  "categories": ["health", "medical", "news"],
   "icons": [
     {
-      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='40' fill='%23ff4757'/><text x='96' y='130' font-size='100' text-anchor='middle'>🦠</text></svg>",
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='36' fill='%23060810'/%3E%3Cpath d='M96 16L32 42V88C32 128 58 164 96 176C134 164 160 128 160 88V42L96 16Z' fill='%230c1020' stroke='%23f03a47' stroke-width='4'/%3E%3Ccircle cx='96' cy='90' r='32' fill='rgba(240,58,71,0.1)'/%3E%3Ccircle cx='96' cy='90' r='10' fill='none' stroke='%23f03a47' stroke-width='5'/%3E%3Cpath d='M96 80 A18 18 0 0 1 114 90' fill='none' stroke='%23f03a47' stroke-width='7' stroke-linecap='round'/%3E%3Cpath d='M96 80 A18 18 0 0 0 78 90' fill='none' stroke='%23f03a47' stroke-width='7' stroke-linecap='round'/%3E%3Cpath d='M114 90 A18 18 0 0 1 105 107' fill='none' stroke='%23f03a47' stroke-width='7' stroke-linecap='round'/%3E%3Cpath d='M78 90 A18 18 0 0 0 87 107' fill='none' stroke='%23f03a47' stroke-width='7' stroke-linecap='round'/%3E%3C/svg%3E",
       "sizes": "192x192",
-      "type": "image/svg+xml"
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
     }
   ],
   "shortcuts": [
-    {
-      "name": "Harita",
-      "url": "/?tab=map",
-      "description": "Canlı salgın haritasını aç"
-    },
-    {
-      "name": "Haberler",
-      "url": "/?tab=news",
-      "description": "Son WHO & CDC haberlerini gör"
-    }
-  ],
-  "screenshots": [],
-  "prefer_related_applications": false
+    { "name": "Canlı Harita", "url": "./index.html", "description": "Salgın haritasını aç" },
+    { "name": "Korunma Rehberi", "url": "./index.html#protect", "description": "Nasıl korunursunuz" }
+  ]
 }
