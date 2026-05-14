@@ -1,1 +1,596 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#04060d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="HantaTakip">
+<link rel="manifest" href="manifest.json">
+<title>HantaTakip</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+:root{
+  --bg0:#04060d;--bg1:#080c18;--bg2:#0e1422;--bg3:#141c2e;--bg4:#1a2438;
+  --border:rgba(255,255,255,0.06);--border2:rgba(255,255,255,0.11);--border3:rgba(255,255,255,0.18);
+  --text:#e2eaf8;--text2:#8fa0bc;--muted:#4a5a72;
+  --red:#e8334a;--red2:rgba(232,51,74,0.15);--red3:rgba(232,51,74,0.08);
+  --amber:#f59e0b;--amber2:rgba(245,158,11,0.12);
+  --blue:#3b9eff;--blue2:rgba(59,158,255,0.12);
+  --green:#10d9a0;--green2:rgba(16,217,160,0.12);
+  --nav-h:64px;--safe:env(safe-area-inset-bottom,0px);
+  --font:'Outfit',sans-serif;--mono:'JetBrains Mono',monospace;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--text);font-family:var(--font);}
 
+/* ── PAGES ── */
+.page{position:fixed;inset:0;bottom:calc(var(--nav-h) + var(--safe));display:flex;flex-direction:column;opacity:0;pointer-events:none;transform:translateY(8px);transition:opacity .25s,transform .25s;}
+.page.active{opacity:1;pointer-events:all;transform:translateY(0);}
+
+/* ── TOP BAR (map page only) ── */
+.topbar{
+  position:absolute;top:0;left:0;right:0;z-index:600;
+  display:flex;align-items:center;gap:10px;padding:10px 14px;
+  background:rgba(4,6,13,0.92);backdrop-filter:blur(16px);
+  border-bottom:1px solid var(--border2);flex-shrink:0;
+}
+.tb-logo{width:34px;height:34px;flex-shrink:0;}
+.tb-titles{flex:1;}
+.tb-name{font-size:16px;font-weight:800;letter-spacing:-0.4px;line-height:1;}
+.tb-name span{color:var(--red);}
+.tb-sub{font-size:9px;color:var(--muted);font-family:var(--mono);margin-top:1px;letter-spacing:0.5px;}
+.live-pill{display:flex;align-items:center;gap:4px;background:var(--red3);border:1px solid rgba(232,51,74,0.3);border-radius:20px;padding:4px 10px;font-size:10px;font-weight:700;color:var(--red);font-family:var(--mono);}
+.ld{width:5px;height:5px;border-radius:50%;background:var(--red);animation:blink 1.4s infinite;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.1}}
+
+/* ── STAT BAR ── */
+.statbar{
+  position:absolute;top:60px;left:0;right:0;z-index:599;
+  display:flex;background:rgba(8,12,24,0.9);backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--border);overflow-x:auto;scrollbar-width:none;
+}
+.statbar::-webkit-scrollbar{display:none;}
+.st{flex:1;min-width:68px;padding:7px 8px;text-align:center;border-right:1px solid var(--border);}
+.st:last-child{border-right:none;}
+.sv{font-family:var(--mono);font-size:15px;font-weight:600;line-height:1;}
+.sv.r{color:var(--red)}.sv.a{color:var(--amber)}.sv.b{color:var(--blue)}.sv.g{color:var(--green)}
+.sl{font-size:8px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.5px;}
+
+/* ── MAP ── */
+#map{flex:1;min-height:0;}
+.leaflet-container{background:#06090f!important;}
+.leaflet-control-zoom{border:1px solid var(--border2)!important;border-radius:10px!important;overflow:hidden;}
+.leaflet-bar a{background:var(--bg2)!important;color:var(--text2)!important;border-color:var(--border)!important;}
+.leaflet-bar a:hover{background:var(--bg3)!important;}
+.leaflet-control-attribution{background:rgba(4,6,13,.85)!important;color:var(--muted)!important;font-size:9px!important;}
+.leaflet-control-attribution a{color:var(--muted)!important;}
+.leaflet-popup-content-wrapper{background:var(--bg2)!important;border:1px solid var(--border3)!important;border-radius:12px!important;box-shadow:0 8px 32px rgba(0,0,0,.7)!important;}
+.leaflet-popup-tip-container{display:none;}
+.leaflet-popup-content{margin:12px 14px!important;font-family:var(--font)!important;}
+.pn{font-size:14px;font-weight:700;letter-spacing:-.3px;margin-bottom:2px;}
+.pt{font-size:9px;font-family:var(--mono);color:var(--red);letter-spacing:.5px;margin-bottom:7px;}
+.pd{font-size:12px;color:var(--text2);line-height:1.5;}
+
+/* ── MAP LEGEND ── */
+.map-legend{
+  position:absolute;bottom:12px;left:12px;z-index:500;
+  background:rgba(4,6,13,.9);border:1px solid var(--border2);
+  border-radius:10px;padding:9px 11px;backdrop-filter:blur(12px);
+}
+.li{display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:10px;color:var(--text2);}
+.li:last-child{margin-bottom:0;}
+.ld2{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+
+/* ── PAGE HEADER ── */
+.page-header{
+  padding:16px 16px 12px;border-bottom:1px solid var(--border);
+  flex-shrink:0;background:var(--bg0);
+}
+.ph-title{font-size:20px;font-weight:800;letter-spacing:-.5px;}
+.ph-sub{font-size:12px;color:var(--muted);margin-top:3px;}
+
+/* ── SCROLL AREA ── */
+.scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px;}
+
+/* ── CARDS ── */
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:10px;}
+.ct{font-size:13px;font-weight:700;letter-spacing:-.2px;display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+
+/* badges */
+.badge{font-size:9px;font-weight:700;padding:3px 8px;border-radius:6px;font-family:var(--mono);letter-spacing:.3px;white-space:nowrap;}
+.br{background:var(--red3);color:var(--red);border:1px solid rgba(232,51,74,.25);}
+.ba{background:var(--amber2);color:var(--amber);border:1px solid rgba(245,158,11,.25);}
+.bb{background:var(--blue2);color:var(--blue);border:1px solid rgba(59,158,255,.25);}
+.bg{background:var(--green2);color:var(--green);border:1px solid rgba(16,217,160,.25);}
+.bm{background:rgba(255,255,255,.04);color:var(--muted);border:1px solid var(--border);}
+
+.row{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);}
+.row:last-child{border-bottom:none;padding-bottom:0;}
+.rt{font-size:13px;font-weight:600;letter-spacing:-.2px;}
+.rs{font-size:11px;color:var(--text2);margin-top:2px;line-height:1.4;}
+
+/* NEWS */
+.ni{padding:12px 0;border-bottom:1px solid var(--border);cursor:pointer;}
+.ni:last-child{border-bottom:none;}
+.ns{font-size:9px;font-family:var(--mono);color:var(--blue);text-transform:uppercase;letter-spacing:.8px;margin-bottom:3px;}
+.nt{font-size:13px;font-weight:500;line-height:1.4;margin-bottom:3px;}
+.nd{font-size:10px;color:var(--muted);}
+
+/* TIMELINE */
+.tl{display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);}
+.tl:last-child{border-bottom:none;}
+.tldot{width:8px;height:8px;border-radius:50%;margin-top:4px;flex-shrink:0;}
+.tldot.r{background:var(--red);box-shadow:0 0 6px var(--red);}
+.tldot.a{background:var(--amber);}
+.tldot.b{background:var(--blue);}
+.tldate{font-size:9px;color:var(--muted);font-family:var(--mono);margin-bottom:2px;letter-spacing:.3px;}
+.tltext{font-size:12px;color:var(--text2);line-height:1.5;}
+
+/* PROTECT */
+.tip{display:flex;gap:12px;background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:8px;}
+.ti{font-size:22px;flex-shrink:0;line-height:1;}
+.tt{font-size:13px;font-weight:700;margin-bottom:3px;}
+.td{font-size:12px;color:var(--text2);line-height:1.5;}
+
+/* CHECKER */
+.sgrid{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:14px;}
+.sbtn{padding:10px 8px;border-radius:10px;border:1px solid var(--border2);background:var(--bg3);color:var(--text);font-size:12px;font-family:var(--font);cursor:pointer;transition:all .15s;text-align:center;font-weight:500;}
+.sbtn.on{background:var(--red3);border-color:rgba(232,51,74,.4);color:var(--red);}
+.abtn{width:100%;padding:13px;border-radius:11px;border:none;background:linear-gradient(135deg,#e8334a,#b8222f);color:#fff;font-size:14px;font-weight:700;font-family:var(--font);cursor:pointer;}
+.result{margin-top:12px;padding:14px;border-radius:11px;display:none;border:1px solid;}
+.result.show{display:block;}
+.result.low{background:var(--green2);border-color:rgba(16,217,160,.25);}
+.result.mid{background:var(--amber2);border-color:rgba(245,158,11,.25);}
+.result.hi{background:var(--red3);border-color:rgba(232,51,74,.25);}
+.rlv{font-size:15px;font-weight:800;margin-bottom:5px;}
+.rd{font-size:12px;color:var(--text2);line-height:1.6;}
+
+/* ── BOTTOM NAV ── */
+.botnav{
+  position:fixed;bottom:0;left:0;right:0;z-index:1000;
+  height:calc(var(--nav-h) + var(--safe));
+  padding-bottom:var(--safe);
+  background:rgba(4,6,13,.97);
+  border-top:1px solid var(--border2);
+  backdrop-filter:blur(20px);
+  display:flex;align-items:center;
+}
+.bni{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:4px;height:100%;cursor:pointer;border:none;background:none;
+  color:var(--muted);transition:color .15s;position:relative;
+}
+.bni.active{color:var(--red);}
+.bni-icon{font-size:22px;line-height:1;}
+.bni-label{font-size:10px;font-weight:600;letter-spacing:.2px;}
+.bni.active::after{
+  content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);
+  width:24px;height:2px;background:var(--red);border-radius:0 0 2px 2px;
+}
+
+/* ── FOOTER BRAND ── */
+.brand{
+  border-top:1px solid var(--border);
+  padding:12px 16px;text-align:center;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  background:var(--bg0);flex-shrink:0;
+}
+.brand-kb{width:18px;height:18px;}
+.brand-txt{font-size:10px;color:var(--muted);font-family:var(--mono);letter-spacing:.3px;}
+
+/* ── ALERT BOX ── */
+.alert{background:linear-gradient(135deg,rgba(232,51,74,.08),rgba(245,158,11,.05));border:1px solid rgba(232,51,74,.2);border-radius:12px;padding:12px 14px;margin-bottom:12px;display:flex;gap:10px;align-items:flex-start;}
+.alert-t{font-size:13px;font-weight:700;color:var(--red);margin-bottom:3px;}
+.alert-d{font-size:12px;color:var(--text2);line-height:1.5;}
+
+/* ── INSTALL ── */
+.inst{display:none;position:fixed;bottom:calc(var(--nav-h) + var(--safe) + 10px);left:12px;right:12px;z-index:2000;background:var(--bg2);border:1px solid var(--border3);border-radius:14px;padding:14px;align-items:center;gap:12px;box-shadow:0 8px 32px rgba(0,0,0,.6);}
+.inst.show{display:flex;}
+.ibtn{background:var(--red);color:#fff;border:none;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:700;font-family:var(--font);cursor:pointer;}
+.ix{background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;margin-left:auto;line-height:1;}
+
+/* ── SPINNER ── */
+.spin-wrap{text-align:center;padding:30px;color:var(--muted);font-size:12px;}
+.spin{display:inline-block;width:18px;height:18px;border:2px solid var(--border2);border-top-color:var(--red);border-radius:50%;animation:sp .7s linear infinite;margin-bottom:8px;}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+/* ── MAP PAGE LAYOUT ── */
+#pg-map{padding-top:0;}
+#pg-map .map-wrap{flex:1;min-height:0;position:relative;margin-top:104px;}
+</style>
+</head>
+<body>
+
+<!-- ══ PAGE: HARİTA ══ -->
+<div class="page active" id="pg-map" style="padding-bottom:0;">
+  <div class="topbar">
+    <!-- KeyBrothers Tech Logo SVG — çapraz çizgi motifi -->
+    <svg class="tb-logo" viewBox="0 0 34 34" fill="none">
+      <rect width="34" height="34" rx="7" fill="#0e1422"/>
+      <rect width="34" height="34" rx="7" fill="url(#kb-border)" opacity="0.6"/>
+      <defs>
+        <linearGradient id="kb-border" x1="0" y1="0" x2="34" y2="34">
+          <stop offset="0%" stop-color="#e8334a" stop-opacity="0.4"/>
+          <stop offset="100%" stop-color="#e8334a" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <!-- Çapraz çizgi — KB logosu motifi -->
+      <line x1="4" y1="30" x2="30" y2="4" stroke="white" stroke-width="2.2" stroke-linecap="round"/>
+      <line x1="4" y1="30" x2="30" y2="4" stroke="white" stroke-width="6" stroke-linecap="round" opacity="0.08"/>
+      <!-- Biyohazard mini dot -->
+      <circle cx="27" cy="7" r="2.5" fill="#e8334a"/>
+    </svg>
+    <div class="tb-titles">
+      <div class="tb-name"><span>Hanta</span>Takip</div>
+      <div class="tb-sub" id="hdr-sub">BAŞLATILIYOR...</div>
+    </div>
+    <div class="live-pill"><div class="ld"></div>CANLI</div>
+  </div>
+
+  <div class="statbar">
+    <div class="st"><div class="sv r" id="s1">—</div><div class="sl">Vaka</div></div>
+    <div class="st"><div class="sv r" id="s2">—</div><div class="sl">Ölüm</div></div>
+    <div class="st"><div class="sv a" id="s3">—</div><div class="sl">Şüpheli</div></div>
+    <div class="st"><div class="sv b" id="s4">—</div><div class="sl">Ülke</div></div>
+    <div class="st"><div class="sv g" id="s5" style="font-size:10px;">—</div><div class="sl">WHO Risk</div></div>
+  </div>
+
+  <div class="map-wrap" style="position:absolute;top:104px;bottom:0;left:0;right:0;">
+    <div id="map" style="width:100%;height:100%;"></div>
+    <div class="map-legend">
+      <div class="li"><div class="ld2" style="background:var(--red);box-shadow:0 0 5px var(--red)"></div>Aktif / ölüm</div>
+      <div class="li"><div class="ld2" style="background:var(--amber)"></div>Şüpheli / izleme</div>
+      <div class="li"><div class="ld2" style="background:var(--red);opacity:.12;border-radius:2px;width:12px;height:7px"></div>Endemik bölge</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ PAGE: HABERLER ══ -->
+<div class="page" id="pg-news">
+  <div class="page-header">
+    <div class="ph-title">📡 Haberler</div>
+    <div class="ph-sub" id="news-time">WHO & Google News — her 30 dk güncellenir</div>
+  </div>
+  <div class="scroll">
+    <div id="news-body"><div class="spin-wrap"><div class="spin"></div><br>Haberler yükleniyor...</div></div>
+    <div class="brand">
+      <svg class="brand-kb" viewBox="0 0 18 18" fill="none">
+        <rect width="18" height="18" rx="3" fill="#111"/>
+        <line x1="2" y1="16" x2="16" y2="2" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
+      </svg>
+      <span class="brand-txt">KeyBrothers Tech. ürünüdür</span>
+    </div>
+  </div>
+</div>
+
+<!-- ══ PAGE: ÜLKELER ══ -->
+<div class="page" id="pg-countries">
+  <div class="page-header">
+    <div class="ph-title">🗺️ Ülkeler</div>
+    <div class="ph-sub">2026 aktif olay — takipteki bölgeler</div>
+  </div>
+  <div class="scroll">
+    <div id="countries-body"><div class="spin-wrap"><div class="spin"></div><br>Yükleniyor...</div></div>
+    <div class="brand">
+      <svg class="brand-kb" viewBox="0 0 18 18" fill="none">
+        <rect width="18" height="18" rx="3" fill="#111"/>
+        <line x1="2" y1="16" x2="16" y2="2" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
+      </svg>
+      <span class="brand-txt">KeyBrothers Tech. ürünüdür</span>
+    </div>
+  </div>
+</div>
+
+<!-- ══ PAGE: KORUNMA ══ -->
+<div class="page" id="pg-protect">
+  <div class="page-header">
+    <div class="ph-title">🛡️ Korunma</div>
+    <div class="ph-sub">WHO & CDC rehberine dayalı önlemler</div>
+  </div>
+  <div class="scroll">
+    <div class="alert">
+      <div>
+        <div class="alert-t">⚠️ Onaylı aşı veya ilaç yok</div>
+        <div class="alert-d">Tek korunma yolu kemirgenlerle temastan kaçınmaktır. Belirtiler gelişirse erken yoğun bakım hayat kurtarır.</div>
+      </div>
+    </div>
+    <div class="tip"><div class="ti">🐀</div><div><div class="tt">Kemirgen Temasını Kesin</div><div class="td">Kapı, pencere ve duvar çatlaklarını kapatın. Gıdaları hava geçirmez kapta saklayın. Dışkı görürseniz kuru süpürmeyin — ıslak dezenfektanla silin.</div></div></div>
+    <div class="tip"><div class="ti">💨</div><div><div class="tt">30 Dakika Havalandır</div><div class="td">Uzun kapalı kalan mekanları açmadan önce pencereleri açıp 30 dk hava sirkülasyonu sağlayın. Elektrikli süpürge ve kuru süpürge kullanmayın.</div></div></div>
+    <div class="tip"><div class="ti">🥼</div><div><div class="tt">N95 Maske + Eldiven</div><div class="td">Şüpheli alanlarda N95+ maske, tek kullanımlık eldiven, uzun kollu kıyafet giyin. Sonrasında 20 sn sabunlu el yıkama zorunlu.</div></div></div>
+    <div class="tip"><div class="ti">🧹</div><div><div class="tt">%10 Çamaşır Suyu</div><div class="td">Dışkı alanına %10'luk çamaşır suyu sıkın (1 ölçek + 9 su), 5 dk bekleyin, kağıt havluyla silin, çift poşetle atın.</div></div></div>
+    <div class="tip"><div class="ti">⛺</div><div><div class="tt">Kamp Güvenliği</div><div class="td">Çadırı zeminden yüksek kurun. Yiyeceği çadırda bırakmayın. Arjantin, Şili ve ABD güneybatısında ekstra dikkat.</div></div></div>
+    <div class="tip"><div class="ti">🚨</div><div><div class="tt">Temas Sonrası 1–8 Hafta İçinde Belirti → ACİL</div><div class="td">Ateş, kas ağrısı, nefes darlığı gelişirse hemen acil servise gidin. Kemirgen temas geçmişini mutlaka bildirin.</div></div></div>
+    <div class="tip"><div class="ti">🇹🇷</div><div><div class="tt">Türkiye'de Durum</div><div class="td">Puumala virüsü Türkiye dahil Batı Palearktik bölgede dolaşımda. Kırsal ve ormanlık alanlarda dikkat gerekli. 2026'da Türk yolcular izleme altında.</div></div></div>
+    <div class="brand">
+      <svg class="brand-kb" viewBox="0 0 18 18" fill="none">
+        <rect width="18" height="18" rx="3" fill="#111"/>
+        <line x1="2" y1="16" x2="16" y2="2" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
+      </svg>
+      <span class="brand-txt">KeyBrothers Tech. ürünüdür</span>
+    </div>
+  </div>
+</div>
+
+<!-- ══ PAGE: BELİRTİLER ══ -->
+<div class="page" id="pg-checker">
+  <div class="page-header">
+    <div class="ph-title">🩺 Belirtiler</div>
+    <div class="ph-sub">Belirti değerlendirici — bilgi amaçlıdır</div>
+  </div>
+  <div class="scroll">
+    <div class="card">
+      <div class="ct">Belirti Seç <span class="badge bm">Son 8 Haftada Temas?</span></div>
+      <div class="sgrid">
+        <button class="sbtn" data-v="2" onclick="toggleSym(this)">🌡️ Yüksek Ateş</button>
+        <button class="sbtn" data-v="2" onclick="toggleSym(this)">💪 Kas Ağrısı</button>
+        <button class="sbtn" data-v="3" onclick="toggleSym(this)">😤 Nefes Darlığı</button>
+        <button class="sbtn" data-v="1" onclick="toggleSym(this)">🤕 Baş Ağrısı</button>
+        <button class="sbtn" data-v="1" onclick="toggleSym(this)">😴 Aşırı Yorgunluk</button>
+        <button class="sbtn" data-v="1" onclick="toggleSym(this)">🤢 Bulantı / Kusma</button>
+        <button class="sbtn" data-v="1" onclick="toggleSym(this)">🥶 Titreme</button>
+        <button class="sbtn" data-v="3" onclick="toggleSym(this)">🫁 Öksürük / Pnömoni</button>
+        <button class="sbtn" data-v="1" onclick="toggleSym(this)">😵 Baş Dönmesi</button>
+        <button class="sbtn" data-v="2" onclick="toggleSym(this)">🐀 Kemirgen Teması</button>
+      </div>
+      <button class="abtn" onclick="analyze()">Değerlendir →</button>
+      <div class="result" id="result">
+        <div class="rlv" id="rlv"></div>
+        <div class="rd" id="rd"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="ct">HCPS — Amerika Tipi <span class="badge br">%20–50 ölüm</span></div>
+      <div class="row"><div><div class="rt">Ani yüksek ateş + titreme</div><div class="rs">38–40°C, grip benzeri başlangıç</div></div></div>
+      <div class="row"><div><div class="rt">Şiddetli kas & sırt ağrısı</div><div class="rs">Özellikle bel, uyluk, omuz</div></div></div>
+      <div class="row"><div><div class="rt">Nefes darlığı — KRİTİK</div><div class="rs">Akciğer ödemi, hızlı kötüleşme</div></div></div>
+      <div class="row"><div><div class="rt">Andes virüsü kişiden kişiye bulaşabilir</div><div class="rs">Aktif 2026 salgınında dikkat</div></div></div>
+    </div>
+
+    <div class="card">
+      <div class="ct">HFRS — Avrupa / Asya Tipi <span class="badge ba">%1–15 ölüm</span></div>
+      <div class="row"><div><div class="rt">Ani ateş, baş & sırt ağrısı</div><div class="rs">Tipik erken belirtiler</div></div></div>
+      <div class="row"><div><div class="rt">Böbrek yetmezliği</div><div class="rs">İdrar azalması, ödem</div></div></div>
+      <div class="row"><div><div class="rt">Kanamalı belirtiler</div><div class="rs">Peteşi, hipotansiyon</div></div></div>
+      <div class="row"><div><div class="rt">Türkiye'de Puumala virüsü dolaşımda</div><div class="rs">Kırsal alanlarda kemirgen temasına dikkat</div></div></div>
+    </div>
+
+    <div class="brand">
+      <svg class="brand-kb" viewBox="0 0 18 18" fill="none">
+        <rect width="18" height="18" rx="3" fill="#111"/>
+        <line x1="2" y1="16" x2="16" y2="2" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
+      </svg>
+      <span class="brand-txt">KeyBrothers Tech. ürünüdür</span>
+    </div>
+  </div>
+</div>
+
+<!-- ══ BOTTOM NAV ══ -->
+<nav class="botnav">
+  <button class="bni active" id="nav-map" onclick="goPage('map')">
+    <div class="bni-icon">🗺️</div>
+    <div class="bni-label">Harita</div>
+  </button>
+  <button class="bni" id="nav-news" onclick="goPage('news')">
+    <div class="bni-icon">📡</div>
+    <div class="bni-label">Haberler</div>
+  </button>
+  <button class="bni" id="nav-countries" onclick="goPage('countries')">
+    <div class="bni-icon">🌍</div>
+    <div class="bni-label">Ülkeler</div>
+  </button>
+  <button class="bni" id="nav-protect" onclick="goPage('protect')">
+    <div class="bni-icon">🛡️</div>
+    <div class="bni-label">Korunma</div>
+  </button>
+  <button class="bni" id="nav-checker" onclick="goPage('checker')">
+    <div class="bni-icon">🩺</div>
+    <div class="bni-label">Belirtiler</div>
+  </button>
+</nav>
+
+<!-- INSTALL BANNER -->
+<div class="inst" id="inst-banner">
+  <div>
+    <div style="font-size:13px;font-weight:700">📲 Ana Ekrana Ekle</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:2px">Offline çalışır, uygulama gibi açılır</div>
+  </div>
+  <button class="ibtn" id="inst-btn">Ekle</button>
+  <button class="ix" onclick="document.getElementById('inst-banner').classList.remove('show')">×</button>
+</div>
+
+<script>
+// ══════════════════════════════
+// NAVIGATION
+// ══════════════════════════════
+const pages = ['map','news','countries','protect','checker'];
+function goPage(id){
+  pages.forEach(p=>{
+    document.getElementById('pg-'+p).classList.toggle('active', p===id);
+    document.getElementById('nav-'+p).classList.toggle('active', p===id);
+  });
+  if(id==='map') setTimeout(()=>map.invalidateSize(),50);
+}
+
+// ══════════════════════════════
+// MAP
+// ══════════════════════════════
+const map = L.map('map',{zoomControl:false}).setView([20,10],2);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
+  attribution:'© OpenStreetMap © CARTO',subdomains:'abcd',maxZoom:19
+}).addTo(map);
+L.control.zoom({position:'topright'}).addTo(map);
+
+// Endemic zones
+[
+  {n:"Güney Amerika (Andes/HPS)",lat:-35,lng:-63,r:900000,c:'#e8334a',d:'Andes virüsü · HCPS · Ölüm %20–50 · Aktif salgın'},
+  {n:"ABD Güneybatısı (Sin Nombre)",lat:36,lng:-108,r:550000,c:'#e8334a',d:'Sin Nombre · 1993–2023: 890 vaka · %35 ölüm'},
+  {n:"Kuzey Avrupa (Puumala)",lat:63,lng:23,r:700000,c:'#3b9eff',d:'Puumala virüsü · HFRS · Yıllık binlerce vaka'},
+  {n:"Orta Avrupa (Dobrava)",lat:46,lng:16,r:480000,c:'#3b9eff',d:'Dobrava virüsü · HFRS · Balkanlar'},
+  {n:"Türkiye / Batı Palearktik",lat:39,lng:34,r:430000,c:'#3b9eff',d:'Puumala dolaşımda · 2026 yolcu takibi'},
+  {n:"Asya — Çin, Kore, Rusya",lat:38,lng:118,r:1000000,c:'#f59e0b',d:'Hantaan & Seoul · HFRS · En yüksek küresel yük'},
+  {n:"Rusya — Geniş bölge",lat:57,lng:65,r:800000,c:'#f59e0b',d:'Puumala & Hantaan · Yıllık yüzlerce vaka'},
+].forEach(z=>{
+  L.circle([z.lat,z.lng],{radius:z.r,color:z.c,fillColor:z.c,fillOpacity:0.07,weight:1,opacity:0.35,dashArray:'5 4'})
+  .addTo(map).bindPopup(`<div class="pn">${z.n}</div><div class="pt">ENDEMİK BÖLGE</div><div class="pd">${z.d}</div>`);
+});
+
+// Active cases
+const CASES=[
+  {n:"🇦🇷 Arjantin — Ushuaia",lat:-54.8,lng:-68.3,s:'src',d:'KAYNAK · 101 vaka (Haz 2025–Nis 2026) · MV Hondius hareket noktası'},
+  {n:"🇳🇱 Hollanda",lat:52.37,lng:4.9,s:'dead',d:'2 ölüm · Onaylı Andes virüsü'},
+  {n:"🇩🇪 Almanya",lat:51.2,lng:10.5,s:'dead',d:'1 ölüm · Düsseldorf Üniversite Hastanesi'},
+  {n:"🇿🇦 Güney Afrika",lat:-26.2,lng:28.0,s:'dead',d:'1 ölüm · O.R. Tambo Havalimanı · PCR pozitif'},
+  {n:"🇨🇭 İsviçre",lat:47.37,lng:8.55,s:'conf',d:'1 onaylı vaka · 6 Mayıs 2026'},
+  {n:"🇬🇧 İngiltere",lat:51.5,lng:-0.12,s:'susp',d:'2 vatandaş + gemi doktoru · Şüpheli'},
+  {n:"🇫🇷 Fransa",lat:46.2,lng:2.2,s:'mon',d:'8 vatandaş aynı uçuşta · İzolasyon'},
+  {n:"🇪🇸 İspanya / Tenerife",lat:28.29,lng:-16.63,s:'resp',d:'Gemi 9 Mayıs\'ta yanaştı · Tahliye devam ediyor'},
+  {n:"🇸🇬 Singapur",lat:1.35,lng:103.8,s:'mon',d:'2 kişi izolasyon · Test negatif'},
+  {n:"🇨🇦 Kanada",lat:56,lng:-106,s:'mon',d:'3 kişi karantinada · Belirti yok'},
+  {n:"🇺🇸 ABD",lat:38,lng:-97,s:'mon',d:'17 Amerikalı gemideydi · CDC aktif'},
+  {n:"🇹🇷 Türkiye",lat:39,lng:35.2,s:'mon',d:'Türk yolcular izleme altında'},
+  {n:"🇦🇺 Avustralya",lat:-25,lng:134,s:'mon',d:'Yolcular takipte · Test bekleniyor'},
+];
+const COLS={src:'#e8334a',dead:'#e8334a',conf:'#e8334a',susp:'#f59e0b',mon:'#3b9eff',resp:'#10d9a0'};
+const LBLS={src:'KAYNAK',dead:'ÖLÜM ✕',conf:'ONAYLI',susp:'ŞÜPHELİ',mon:'İZLEME',resp:'TAHLİYE'};
+CASES.forEach(c=>{
+  const col=COLS[c.s]||'#888';
+  const sz=c.s==='src'?14:c.s==='dead'?11:9;
+  const anim=c.s==='src'?'animation:blink 1.4s infinite;':'';
+  L.marker([c.lat,c.lng],{icon:L.divIcon({
+    className:'',
+    html:`<div style="width:${sz}px;height:${sz}px;border-radius:50%;background:${col};border:1.5px solid rgba(255,255,255,.25);box-shadow:0 0 ${sz+4}px ${col}aa;${anim}"></div>`,
+    iconSize:[sz,sz],iconAnchor:[sz/2,sz/2]
+  })}).addTo(map).bindPopup(`<div class="pn">${c.n}</div><div class="pt">${LBLS[c.s]}</div><div class="pd">${c.d}</div>`);
+});
+
+// Route
+L.polyline([[-54.8,-68.3],[-50,-40],[-15.9,-5.7],[4.7,-14.4],[15.9,-23.5],[28.29,-16.63]],
+  {color:'#f59e0b',weight:1.5,opacity:.5,dashArray:'7 5'}).addTo(map)
+  .bindPopup('<div class="pn">🚢 MV Hondius Rotası</div><div class="pt">1 NİSAN – 9 MAYIS 2026</div><div class="pd">Ushuaia → Güney Atlantik → St. Helena → Tenerife</div>');
+
+// ══════════════════════════════
+// LIVE DATA
+// ══════════════════════════════
+async function fetchStats(){
+  let v=16,d=3,s=4,c=13;
+  try{
+    const r=await fetch('https://hantacount.com/api/cases',{signal:AbortSignal.timeout(5000)});
+    if(r.ok){const j=await r.json();
+      if(j.confirmed!=null)v=j.confirmed;
+      if(j.deaths!=null)d=j.deaths;
+      if(j.suspected!=null)s=j.suspected;
+      if(j.countries!=null)c=j.countries;
+    }
+  }catch(e){}
+  document.getElementById('s1').textContent=v;
+  document.getElementById('s2').textContent=d;
+  document.getElementById('s3').textContent=s;
+  document.getElementById('s4').textContent=c;
+  document.getElementById('s5').textContent='🟡 DÜŞÜK';
+  const now=new Date();
+  const t=now.toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'});
+  document.getElementById('hdr-sub').textContent=`SON GÜNCELLEME: ${t}`;
+
+  // Countries
+  const sm={src:['br','KAYNAK'],dead:['br','ÖLÜM ✕'],conf:['br','ONAYLI'],susp:['ba','ŞÜPHELİ'],mon:['bb','İZLEME'],resp:['bg','TAHLİYE']};
+  document.getElementById('countries-body').innerHTML=`
+    <div class="card"><div class="ct">2026 Aktif Olay <span class="badge br">${c} ÜLKE</span></div>
+    ${CASES.map(x=>{const[cl,lb]=sm[x.s]||['bm','?'];return`<div class="row"><div><div class="rt">${x.n}</div><div class="rs">${x.d}</div></div><span class="badge ${cl}">${lb}</span></div>`;}).join('')}
+    </div>
+    <div class="card"><div class="ct">Endemik Bölgeler</div>
+    <div class="row"><div><div class="rt">Asya — Çin, Kore, Rusya</div><div class="rs">Hantaan & Seoul · HFRS · En yüksek küresel yük</div></div><span class="badge br">YÜKSEK</span></div>
+    <div class="row"><div><div class="rt">Kuzey Avrupa</div><div class="rs">Puumala virüsü · Yıllık binlerce vaka</div></div><span class="badge ba">ORTA</span></div>
+    <div class="row"><div><div class="rt">Güney Amerika</div><div class="rs">Andes virüsü · HCPS · Aktif salgın</div></div><span class="badge br">AKTİF</span></div>
+    <div class="row"><div><div class="rt">ABD Güneybatısı</div><div class="rs">Sin Nombre · 1993–2023: 890 vaka</div></div><span class="badge ba">SPORADİK</span></div>
+    <div class="row"><div><div class="rt">Türkiye</div><div class="rs">Puumala dolaşımda · Düşük vaka sayısı</div></div><span class="badge bb">İZLEME</span></div>
+    </div>
+    <div style="font-size:10px;color:var(--muted);text-align:center;margin-top:4px;font-family:var(--mono)">Kaynak: WHO · CDC · HantaCount API</div>
+    <div class="brand" style="margin-top:8px;">
+      <svg class="brand-kb" viewBox="0 0 18 18" fill="none"><rect width="18" height="18" rx="3" fill="#111"/><line x1="2" y1="16" x2="16" y2="2" stroke="white" stroke-width="1.8" stroke-linecap="round"/></svg>
+      <span class="brand-txt">KeyBrothers Tech. ürünüdür</span>
+    </div>
+  `;
+}
+
+async function fetchNews(){
+  const feeds=[
+    {url:'https://www.who.int/feeds/entity/csr/don/en/rss.xml',src:'WHO'},
+    {url:'https://news.google.com/rss/search?q=hantavirus&hl=tr&gl=TR&ceid=TR:tr',src:'Google News'},
+  ];
+  let items=[];
+  for(const f of feeds){
+    try{
+      const r=await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(f.url)}&count=8`);
+      const d=await r.json();
+      if(d.items){
+        d.items.filter(i=>i.title.toLowerCase().includes('hanta')||f.src==='Google News').slice(0,5).forEach(i=>{
+          items.push({t:i.title,d:new Date(i.pubDate).toLocaleDateString('tr-TR',{day:'numeric',month:'short',year:'numeric'}),s:f.src,l:i.link});
+        });
+      }
+    }catch(e){}
+  }
+  if(!items.length){
+    items=[
+      {t:'WHO DON-599: MV Hondius gemisine bağlı Andes Hantavirüsü kümesi — çok ülkeli',d:'8 May 2026',s:'WHO',l:'https://www.who.int/emergencies/disease-outbreak-news/item/2026-DON599'},
+      {t:'Cruise gemisindeki ölümcül hantavirüs salgınına CDC müdahalesi sürüyor',d:'9 May 2026',s:'CDC',l:'https://www.cdc.gov/hantavirus/situation-summary/index.html'},
+      {t:'WHO: "Bu COVID değil" — hantavirüs küresel riski düşük',d:'8 May 2026',s:'WHO',l:'https://www.who.int/news-room/fact-sheets/detail/hantavirus'},
+      {t:'Arjantin: Haz 2025\'ten bu yana 101 hantavirüs vakası — önceki yılın iki katı',d:'7 May 2026',s:'PAHO',l:'https://www.who.int/emergencies/disease-outbreak-news/item/2026-DON599'},
+      {t:'MV Hondius Tenerife\'ye yanaştı: 140+ yolcu tahliye ediliyor',d:'9 May 2026',s:'Reuters',l:'https://www.cdc.gov/hantavirus/situation-summary/index.html'},
+      {t:'Singapur: İki vakanın testi negatif çıktı — izolasyon tamamlandı',d:'6 May 2026',s:'MOH SG',l:'https://www.who.int/emergencies/disease-outbreak-news/item/2026-DON599'},
+    ];
+  }
+  document.getElementById('news-time').textContent=`WHO & Google News — ${new Date().toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'})} güncellendi`;
+  document.getElementById('news-body').innerHTML=`
+    <div class="alert"><div><div class="alert-t">📡 Canlı Haber Akışı</div><div class="alert-d">WHO hastalık bildirimleri ve güncel haberler. Her 30 dk otomatik yenilenir.</div></div></div>
+    ${items.map(i=>`<div class="ni" onclick="window.open('${i.l}','_blank')"><div class="ns">${i.s}</div><div class="nt">${i.t}</div><div class="nd">${i.d}</div></div>`).join('')}
+    <div class="brand" style="margin-top:12px;">
+      <svg class="brand-kb" viewBox="0 0 18 18" fill="none"><rect width="18" height="18" rx="3" fill="#111"/><line x1="2" y1="16" x2="16" y2="2" stroke="white" stroke-width="1.8" stroke-linecap="round"/></svg>
+      <span class="brand-txt">KeyBrothers Tech. ürünüdür</span>
+    </div>
+  `;
+}
+
+// ══════════════════════════════
+// SYMPTOM CHECKER
+// ══════════════════════════════
+function toggleSym(b){b.classList.toggle('on');}
+function analyze(){
+  const btns=document.querySelectorAll('.sbtn.on');
+  let score=0;btns.forEach(b=>score+=parseInt(b.dataset.v));
+  const box=document.getElementById('result');
+  box.className='result show';
+  if(score===0){box.classList.add('low');document.getElementById('rlv').textContent='✓ Belirti Seçilmedi';document.getElementById('rd').textContent='Kemirgen teması yaşadıysanız 1–8 hafta boyunca kendinizi gözlemleyin.';}
+  else if(score<=3){box.classList.add('low');document.getElementById('rlv').textContent='🟢 Düşük Risk';document.getElementById('rd').textContent='Belirtiler hafif. Kemirgen teması ve 2–3 günde geçmeme durumunda hekime başvurun.';}
+  else if(score<=6){box.classList.add('mid');document.getElementById('rlv').textContent='🟡 Orta Risk — Dikkat';document.getElementById('rd').textContent='Birden fazla belirti mevcut. Son 8 haftada kemirgen teması veya endemik bölgede bulunma durumunda derhal hekime başvurun.';}
+  else{box.classList.add('hi');document.getElementById('rlv').textContent='🔴 Yüksek Risk — ACİL';document.getElementById('rd').textContent='Ağır belirti kombinasyonu. HEMEN acil servise gidin. Kemirgen temas geçmişini mutlaka bildirin — erken yoğun bakım hayat kurtarır!';}
+}
+
+// ══════════════════════════════
+// PWA
+// ══════════════════════════════
+let dp;
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();dp=e;document.getElementById('inst-banner').classList.add('show');});
+document.getElementById('inst-btn').addEventListener('click',async()=>{if(dp){dp.prompt();await dp.userChoice;dp=null;document.getElementById('inst-banner').classList.remove('show');}});
+if(/iphone|ipad|ipod/i.test(navigator.userAgent)&&!window.navigator.standalone){
+  const b=document.getElementById('inst-banner');
+  b.querySelector('.ibtn').textContent='Nasıl?';
+  b.querySelector('div div:last-child').textContent='Safari → Paylaş → Ana Ekrana Ekle';
+  b.classList.add('show');
+  document.getElementById('inst-btn').onclick=()=>{alert("Safari'de: alt menü → 'Ana Ekrana Ekle'");b.classList.remove('show');};
+}
+if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});
+
+// ══════════════════════════════
+// INIT
+// ══════════════════════════════
+fetchStats();
+fetchNews();
+setInterval(()=>{fetchStats();fetchNews();},30*60*1000);
+</script>
+</body>
+</html>
